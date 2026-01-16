@@ -20,7 +20,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 // Replace the object below with the one from your Firebase Console!
 // -------------------------------------------------------------------------
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY_HERE",
+  apiKey: "AIzaSyBV_Kh3-3GZzCTDF8t5hIgkxqtqML6swZc",
   authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
   projectId: "YOUR_PROJECT_ID",
   storageBucket: "YOUR_PROJECT_ID.appspot.com",
@@ -32,15 +32,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = 'praiz-toyin-2029';
 
 const App = () => {
   // CONFIGURATION: CHANGE YOUR PHOTO FILENAME HERE
-  // Make sure this file is inside your 'public' folder!
   const couplePhoto = "/our-photo.jpg"; 
 
   const weddingDate = useMemo(() => new Date("August 4, 2029 00:00:00").getTime(), []);
-  const callDate = useMemo(() => new Date("May 27, 2024").getTime(), []); 
+  const callDate = useMemo(() => new Date("May 1, 2024").getTime(), []); // UPDATED TO MAY 2024
   
   // States
   const [user, setUser] = useState(null);
@@ -69,7 +67,7 @@ const App = () => {
       try {
         await signInAnonymously(auth);
       } catch (err) {
-        console.error("Firebase Auth Error", err);
+        console.error("Firebase Auth Error: Did you enable Anonymous Auth in the console?", err);
       }
     };
     initAuth();
@@ -79,15 +77,16 @@ const App = () => {
 
   useEffect(() => {
     if (!user) return;
-    const thoughtsCol = collection(db, 'artifacts', appId, 'public', 'data', 'thoughts');
-    const thoughtsUnsub = onSnapshot(thoughtsCol, (snap) => {
+
+    // Listen for Thoughts
+    const thoughtsUnsub = onSnapshot(collection(db, 'thoughts'), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setThoughts(data);
     });
 
-    const bucketCol = collection(db, 'artifacts', appId, 'public', 'data', 'bucketlist');
-    const bucketUnsub = onSnapshot(bucketCol, (snap) => {
+    // Listen for Bucket List
+    const bucketUnsub = onSnapshot(collection(db, 'bucketlist'), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setBucketList(data);
@@ -143,18 +142,21 @@ const App = () => {
     if (!thoughtInput.trim() || !user || isPosting) return;
     setIsPosting(true);
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'thoughts'), {
+      await addDoc(collection(db, 'thoughts'), {
         author: selectedAuthor, text: thoughtInput, createdAt: serverTimestamp()
       });
       setThoughtInput(""); setCompliment(""); setSelectedAuthor(null);
-    } catch (err) { console.error(err); } finally { setIsPosting(false); }
+    } catch (err) { 
+      console.error(err);
+      alert("Sanctuary Error: Check your Firestore rules or internet connection!");
+    } finally { setIsPosting(false); }
   };
 
   const addToBucketList = async (e) => {
     e.preventDefault();
     if (!bucketInput.trim() || !user) return;
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'bucketlist'), {
+      await addDoc(collection(db, 'bucketlist'), {
         task: bucketInput, completed: false, createdAt: serverTimestamp()
       });
       setBucketInput("");
@@ -163,12 +165,12 @@ const App = () => {
 
   const toggleBucketItem = async (id, current) => {
     try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'bucketlist', id), { completed: !current });
+      await updateDoc(doc(db, 'bucketlist', id), { completed: !current });
     } catch (err) { console.error(err); }
   };
 
   const deleteBucketItem = async (id) => {
-    try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'bucketlist', id)); } 
+    try { await deleteDoc(doc(db, 'bucketlist', id)); } 
     catch (err) { console.error(err); }
   };
 
@@ -204,7 +206,7 @@ const App = () => {
         )}
       </AnimatePresence>
 
-      <audio ref={audioRef} loop src="https://www.epidemicsound.com/music/tracks/9048a988-0f05-3386-b2ce-db01d099fa05/" />
+      <audio ref={audioRef} loop src="https://www.epidemicsound.com/music/tracks/bec2d245-fa32-3624-b8ae-333b308c9e78/" />
 
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-5%] left-[-5%] w-[50%] h-[50%] bg-rose-100/40 blur-[150px] rounded-full"></div>
@@ -256,12 +258,7 @@ const App = () => {
             <p className="text-stone-400 font-sans tracking-[0.8em] uppercase text-xs mb-24 opacity-60">Architects of a Shared Destiny</p>
           </motion.div>
 
-          {/* Interactive Hero Image Display */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="relative w-full max-w-5xl mx-auto aspect-[16/8] group"
-          >
+          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="relative w-full max-w-5xl mx-auto aspect-[16/8] group">
              <div className="absolute inset-0 bg-rose-50/50 rounded-[5rem] -rotate-1 group-hover:rotate-0 transition-transform duration-1000"></div>
              <div className="relative h-full w-full bg-stone-50 rounded-[5rem] overflow-hidden border-[16px] border-white shadow-2xl flex items-center justify-center">
                 {/* PHOTO DISPLAY */}
@@ -269,10 +266,9 @@ const App = () => {
                   src={couplePhoto} 
                   alt="Praiz and Toyin" 
                   className="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-1000"
-                  onError={(e) => e.target.style.display = 'none'} // Hides if image fails to load
+                  onError={(e) => e.target.style.display = 'none'} 
                 />
                 
-                {/* FALLBACK IF NO PHOTO */}
                 <div className="text-center z-10">
                     <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1, ease: "easeInOut" }} className="text-rose-200 mb-6 flex justify-center">
                       <Heart size={64} fill="currentColor" />
@@ -284,14 +280,13 @@ const App = () => {
                       <MapPin size={14} />
                       <span className="text-[10px] font-sans font-bold tracking-widest uppercase">The Long Call</span>
                    </div>
-                   <p className="text-2xl italic font-serif text-white underline decoration-rose-400 underline-offset-8 drop-shadow-lg">Lagos, Dec 22, 2025</p>
+                   <p className="text-2xl italic font-serif text-white underline decoration-rose-400 underline-offset-8 drop-shadow-lg">Lagos, DEC 2025</p>
                 </div>
              </div>
           </motion.div>
         </div>
       </section>
 
-      {/* STATS SECTION */}
       <section id="stats" className="py-24 bg-white border-y border-stone-50 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8">
@@ -320,7 +315,6 @@ const App = () => {
         </div>
       </section>
 
-      {/* SANCTUARY SECTION */}
       <section id="sanctuary" className="py-40 px-6 max-w-7xl mx-auto grid lg:grid-cols-5 gap-24">
           <div className="lg:col-span-2">
             <div className="sticky top-40">
@@ -366,7 +360,6 @@ const App = () => {
           </div>
       </section>
 
-      {/* BLUEPRINT SECTION */}
       <section id="blueprint" className="py-40 px-6 bg-[#f9f8f6]">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-24"><h2 className="text-6xl italic mb-6">The 2029 Blueprint</h2></div>
@@ -388,7 +381,6 @@ const App = () => {
         </div>
       </section>
 
-      {/* GAME SECTION */}
       <section id="game" className="py-40 px-6">
         <div className="max-w-2xl mx-auto text-center mb-16"><h2 className="text-4xl italic mb-4">The Quest</h2></div>
         <div className="relative h-[500px] max-w-2xl mx-auto bg-white rounded-[5rem] shadow-2xl border border-stone-50 overflow-hidden">
@@ -419,7 +411,7 @@ const App = () => {
          <h2 className="text-3xl italic mb-2 tracking-wide">Praiz & Toyin</h2>
          <p className="font-sans text-[11px] font-black tracking-[0.8em] text-stone-300 uppercase mb-20">The Eternal Union</p>
          <div className="flex flex-col md:flex-row justify-center items-center gap-16 text-[10px] font-sans font-black text-stone-400 tracking-[0.5em] uppercase">
-            <div className="flex flex-col gap-3"><span className="text-stone-200">OUR BEGINNING</span><span className="text-stone-800">JANUARY 16, 2026</span></div>
+            <div className="flex flex-col gap-3"><span className="text-stone-200">OUR BEGINNING</span><span className="text-stone-800">MAY 2024</span></div>
             <div className="hidden md:block w-px h-16 bg-stone-100"></div>
             <div className="flex flex-col gap-3"><span className="text-stone-200">OUR DESTINY</span><span className="text-stone-800">AUGUST 4, 2029</span></div>
          </div>
