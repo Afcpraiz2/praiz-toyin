@@ -5,7 +5,7 @@ import {
   Flame, Infinity as InfinityIcon, Sparkle, 
   Sun, Moon, Sparkles, Anchor, Milestone, 
   Wind, Navigation, Clover, Eye, Gem, 
-  Send, Ghost
+  Send, Ghost, RotateCcw
 } from 'lucide-react';
 
 // FIREBASE (Auth only for stability)
@@ -27,7 +27,7 @@ const auth = getAuth(app);
 const App = () => {
   const couplePhoto = "/our-photo.jpg"; 
   const weddingDate = useMemo(() => new Date("August 4, 2029 00:00:00").getTime(), []);
-  const callDate = useMemo(() => new Date("May 1, 2024").getTime(), []); 
+  const callDate = useMemo(() => new Date("May 27, 2024").getTime(), []); 
   
   const [hasStarted, setHasStarted] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -46,7 +46,7 @@ const App = () => {
     { title: "Our Foundation", text: "By 2029, our roots will be deeper than any storm could reach.", icon: <Anchor className="text-blue-400" /> },
     { title: "Our Adventure", text: "Laughter will be the primary language spoken in our new home.", icon: <Navigation className="text-orange-400" /> },
     { title: "Our Prosperity", text: "Our hands will build more than a house; we will build a legacy.", icon: <Gem className="text-emerald-400" /> },
-    { title: "Our Peace", text: "Silence between us will never be awkward; it will be our sanctuary.", icon: <Wind className="text-teal-400" /> }
+    { title: "Our Peace", text: "Peace will forever be in our sanctuary.", icon: <Wind className="text-teal-400" /> }
   ];
   const [selectedProphecy, setSelectedProphecy] = useState(null);
 
@@ -64,7 +64,6 @@ const App = () => {
   const [lanterns, setLanterns] = useState([]);
 
   const releaseLantern = (e) => {
-    // Get click position relative to the container
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -78,13 +77,12 @@ const App = () => {
 
     setLanterns((prev) => [...prev, newLantern]);
 
-    // Remove lantern after animation
     setTimeout(() => {
       setLanterns((prev) => prev.filter((l) => l.id !== newLantern.id));
     }, 6000);
   };
 
-  // --- TIMER ---
+  // --- LIVE TIMER LOGIC ---
   useEffect(() => {
     const updateTimer = () => {
       const distance = weddingDate - new Date().getTime();
@@ -97,6 +95,9 @@ const App = () => {
         });
       }
     };
+    
+    // Initial call to prevent 1s delay
+    updateTimer();
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
   }, [weddingDate]);
@@ -163,14 +164,19 @@ const App = () => {
       <section className="py-20 px-6 max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           <div className={`${t.card} p-8 rounded-[2.5rem] border ${t.border}`}>
              <Flame size={18} className="mx-auto mb-4 text-orange-400" />
-             <h4 className="text-4xl italic mb-1">{daysSinceCall}</h4>
+             <h4 className="text-4xl italic mb-1 tabular-nums">{daysSinceCall}</h4>
              <p className="text-[8px] font-sans font-bold tracking-widest uppercase opacity-40">Days of Unity</p>
           </div>
           <div className="col-span-2 p-8 bg-[#3E4A3D] rounded-[3rem] text-white flex items-center justify-center">
-             <div className="grid grid-cols-3 gap-6 md:gap-10 text-center w-full">
-                {[ { l: 'DAYS', v: timeLeft.days }, { l: 'HRS', v: timeLeft.hours }, { l: 'MIN', v: timeLeft.minutes } ].map((u, i) => (
+             <div className="grid grid-cols-4 gap-6 md:gap-4 text-center w-full">
+                {[ 
+                  { l: 'DAYS', v: timeLeft.days }, 
+                  { l: 'HRS', v: timeLeft.hours }, 
+                  { l: 'MIN', v: timeLeft.minutes },
+                  { l: 'SEC', v: timeLeft.seconds }
+                ].map((u, i) => (
                   <div key={i}>
-                     <div className="text-3xl md:text-5xl italic leading-none">{u.v}</div>
+                     <div className="text-3xl md:text-5xl italic leading-none tabular-nums">{u.v}</div>
                      <div className="text-[7px] font-sans font-bold tracking-[0.3em] uppercase mt-2 opacity-40">{u.l}</div>
                   </div>
                 ))}
@@ -234,7 +240,7 @@ const App = () => {
                   <Star size={100} className="text-stone-400" />
                </div>
                
-               <AnimatePresence shadow>
+               <AnimatePresence>
                   {lanterns.map((l) => (
                     <motion.div
                       key={l.id}
