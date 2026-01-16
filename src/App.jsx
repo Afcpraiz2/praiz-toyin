@@ -11,21 +11,21 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, onSnapshot, 
-  serverTimestamp, updateDoc, doc, deleteDoc 
+  serverTimestamp, updateDoc, doc, deleteDoc, query, orderBy 
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 // -------------------------------------------------------------------------
-// STEP 4: FIREBASE CONFIGURATION
-// Replace the object below with the one from your Firebase Console!
+// STEP 1: YOUR FIREBASE CONFIG
+// Paste your actual config from the Firebase Console here!
 // -------------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyBV_Kh3-3GZzCTDF8t5hIgkxqtqML6swZc",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_ID",
-  appId: "YOUR_APP_ID"
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "...",
+  appId: "..."
 };
 
 // Initialize Firebase
@@ -34,25 +34,19 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const App = () => {
-  // CONFIGURATION: CHANGE YOUR PHOTO FILENAME HERE
   const couplePhoto = "/our-photo.jpg"; 
-
   const weddingDate = useMemo(() => new Date("August 4, 2029 00:00:00").getTime(), []);
-  const callDate = useMemo(() => new Date("May 1, 2024").getTime(), []); // UPDATED TO MAY 2024
+  const callDate = useMemo(() => new Date("May 1, 2024").getTime(), []); 
   
-  // States
   const [user, setUser] = useState(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [gameScore, setGameScore] = useState(0);
   const [gameState, setGameState] = useState('idle');
   const [hearts, setHearts] = useState([]);
-  
-  // Audio State
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef(null);
 
-  // Data States
   const [thoughts, setThoughts] = useState([]);
   const [bucketList, setBucketList] = useState([]);
   const [selectedAuthor, setSelectedAuthor] = useState(null);
@@ -61,45 +55,42 @@ const App = () => {
   const [bucketInput, setBucketInput] = useState("");
   const [isPosting, setIsPosting] = useState(false);
 
-  // --- Auth & Data Listeners ---
+  // --- 1. AUTHENTICATION ---
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.error("Firebase Auth Error: Did you enable Anonymous Auth in the console?", err);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+    signInAnonymously(auth).catch(err => console.error("Auth failed:", err));
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (u) setUser(u);
+    });
     return () => unsubscribe();
   }, []);
 
+  // --- 2. LIVE DATA SYNC (The "Memory" of the site) ---
   useEffect(() => {
     if (!user) return;
 
-    // Listen for Thoughts
-    const thoughtsUnsub = onSnapshot(collection(db, 'thoughts'), (snap) => {
+    // Sync Thoughts
+    const qThoughts = collection(db, 'thoughts');
+    const unsubThoughts = onSnapshot(qThoughts, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setThoughts(data);
     });
 
-    // Listen for Bucket List
-    const bucketUnsub = onSnapshot(collection(db, 'bucketlist'), (snap) => {
+    // Sync Bucket List
+    const qBucket = collection(db, 'bucketlist');
+    const unsubBucket = onSnapshot(qBucket, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setBucketList(data);
     });
 
-    return () => { thoughtsUnsub(); bucketUnsub(); };
+    return () => { unsubThoughts(); unsubBucket(); };
   }, [user]);
 
-  // --- Live Countdown Logic ---
+  // --- 3. COUNTDOWN TIMER ---
   useEffect(() => {
     const updateTimer = () => {
-      const now = new Date().getTime();
-      const distance = weddingDate - now;
+      const distance = weddingDate - new Date().getTime();
       if (distance > 0) {
         setTimeLeft({
           days: Math.floor(distance / (1000 * 60 * 60 * 24)),
@@ -109,32 +100,16 @@ const App = () => {
         });
       }
     };
-    updateTimer();
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
   }, [weddingDate]);
 
-  // --- Handlers ---
+  // --- 4. ACTIONS ---
   const handleStartExperience = () => {
     setHasStarted(true);
     if (audioRef.current) {
       audioRef.current.play().then(() => setIsPlaying(true)).catch(e => console.log("Audio block", e));
     }
-  };
-
-  const toggleAudio = () => {
-    if (isPlaying) { audioRef.current.pause(); } 
-    else { audioRef.current.play().catch(e => console.log("Audio block", e)); }
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleAuthorSelection = (name) => {
-    setSelectedAuthor(name);
-    const comps = {
-      Praiz: ["Praiz, you are the rock and the anchor.", "The visionary behind our August 4th.", "Toyin's greatest blessing and daily joy."],
-      Toyin: ["Toyin, you're the heartbeat of this journey.", "A queen of grace and endless beauty.", "The melody in Praiz's favorite song."]
-    };
-    setCompliment(comps[name][Math.floor(Math.random() * comps[name].length)]);
   };
 
   const postThought = async (e) => {
@@ -143,13 +118,13 @@ const App = () => {
     setIsPosting(true);
     try {
       await addDoc(collection(db, 'thoughts'), {
-        author: selectedAuthor, text: thoughtInput, createdAt: serverTimestamp()
+        author: selectedAuthor,
+        text: thoughtInput,
+        createdAt: serverTimestamp()
       });
       setThoughtInput(""); setCompliment(""); setSelectedAuthor(null);
-    } catch (err) { 
-      console.error(err);
-      alert("Sanctuary Error: Check your Firestore rules or internet connection!");
-    } finally { setIsPosting(false); }
+    } catch (err) { alert("Error saving to Sanctuary. Check Firebase Rules!"); }
+    finally { setIsPosting(false); }
   };
 
   const addToBucketList = async (e) => {
@@ -164,14 +139,11 @@ const App = () => {
   };
 
   const toggleBucketItem = async (id, current) => {
-    try {
-      await updateDoc(doc(db, 'bucketlist', id), { completed: !current });
-    } catch (err) { console.error(err); }
+    await updateDoc(doc(db, 'bucketlist', id), { completed: !current });
   };
 
   const deleteBucketItem = async (id) => {
-    try { await deleteDoc(doc(db, 'bucketlist', id)); } 
-    catch (err) { console.error(err); }
+    await deleteDoc(doc(db, 'bucketlist', id));
   };
 
   const startGame = () => { setGameScore(0); setGameState('playing'); setHearts([]); };
@@ -208,6 +180,7 @@ const App = () => {
 
       <audio ref={audioRef} loop src="https://www.epidemicsound.com/music/tracks/bec2d245-fa32-3624-b8ae-333b308c9e78/" />
 
+      {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-5%] left-[-5%] w-[50%] h-[50%] bg-rose-100/40 blur-[150px] rounded-full"></div>
         <div className="absolute bottom-[-5%] right-[-5%] w-[50%] h-[50%] bg-orange-50/40 blur-[150px] rounded-full"></div>
@@ -223,7 +196,11 @@ const App = () => {
             </motion.div>
           )}
         </AnimatePresence>
-        <button onClick={toggleAudio} className="w-16 h-16 bg-rose-500 text-white rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg">
+        <button onClick={() => {
+            if (isPlaying) { audioRef.current.pause(); } 
+            else { audioRef.current.play(); }
+            setIsPlaying(!isPlaying);
+        }} className="w-16 h-16 bg-rose-500 text-white rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg">
           {isPlaying ? <Pause size={24} /> : <Play size={24} fill="white" className="ml-1" />}
         </button>
       </motion.div>
@@ -252,7 +229,7 @@ const App = () => {
                <div className="w-2 h-2 bg-rose-400 rounded-full animate-ping"></div>
                <span className="text-[10px] font-sans font-bold tracking-[0.2em] text-rose-400 uppercase">Live Countdown Activated</span>
             </div>
-            <h1 className="text-7xl md:text-[12rem] font-light italic leading-none mb-6 tracking-tighter">
+            <h1 className="text-7xl md:text-[12rem] font-light italic leading-none mb-6 tracking-tighter text-stone-800">
               Praiz <span className="text-rose-300 font-serif not-italic">&</span> Toyin
             </h1>
             <p className="text-stone-400 font-sans tracking-[0.8em] uppercase text-xs mb-24 opacity-60">Architects of a Shared Destiny</p>
@@ -261,20 +238,17 @@ const App = () => {
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="relative w-full max-w-5xl mx-auto aspect-[16/8] group">
              <div className="absolute inset-0 bg-rose-50/50 rounded-[5rem] -rotate-1 group-hover:rotate-0 transition-transform duration-1000"></div>
              <div className="relative h-full w-full bg-stone-50 rounded-[5rem] overflow-hidden border-[16px] border-white shadow-2xl flex items-center justify-center">
-                {/* PHOTO DISPLAY */}
                 <img 
                   src={couplePhoto} 
                   alt="Praiz and Toyin" 
                   className="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-1000"
                   onError={(e) => e.target.style.display = 'none'} 
                 />
-                
                 <div className="text-center z-10">
                     <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1, ease: "easeInOut" }} className="text-rose-200 mb-6 flex justify-center">
                       <Heart size={64} fill="currentColor" />
                     </motion.div>
                 </div>
-
                 <div className="absolute bottom-12 right-12 text-right z-20">
                    <div className="flex items-center justify-end gap-2 text-white drop-shadow-lg mb-2">
                       <MapPin size={14} />
@@ -325,8 +299,14 @@ const App = () => {
                       <motion.div key="sel" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                         <p className="text-[10px] font-sans font-black uppercase tracking-[0.4em] text-stone-300 mb-10 text-center">Identity Verification</p>
                         <div className="grid grid-cols-2 gap-6">
-                           <button onClick={() => handleAuthorSelection('Praiz')} className="group p-1"><div className="py-6 rounded-3xl border border-stone-100 group-hover:bg-stone-900 group-hover:text-white transition-all font-sans font-bold text-[10px] uppercase tracking-widest">Praiz</div></button>
-                           <button onClick={() => handleAuthorSelection('Toyin')} className="group p-1"><div className="py-6 rounded-3xl border border-rose-100 group-hover:bg-rose-500 group-hover:text-white transition-all font-sans font-bold text-[10px] uppercase tracking-widest">Toyin</div></button>
+                           <button onClick={() => {
+                              setSelectedAuthor('Praiz');
+                              setCompliment("Praiz, you are the rock and the anchor.");
+                           }} className="group p-1"><div className="py-6 rounded-3xl border border-stone-100 group-hover:bg-stone-900 group-hover:text-white transition-all font-sans font-bold text-[10px] uppercase tracking-widest text-center">Praiz</div></button>
+                           <button onClick={() => {
+                              setSelectedAuthor('Toyin');
+                              setCompliment("Toyin, you're the heartbeat of this journey.");
+                           }} className="group p-1"><div className="py-6 rounded-3xl border border-rose-100 group-hover:bg-rose-500 group-hover:text-white transition-all font-sans font-bold text-[10px] uppercase tracking-widest text-center">Toyin</div></button>
                         </div>
                       </motion.div>
                     ) : (
@@ -335,7 +315,7 @@ const App = () => {
                         <form onSubmit={postThought} className="space-y-6">
                            <textarea value={thoughtInput} onChange={(e) => setThoughtInput(e.target.value)} placeholder="Whisper to 2029..." className="w-full bg-stone-50 rounded-[2.5rem] p-8 border-none focus:ring-2 focus:ring-rose-100 outline-none text-sm italic min-h-[180px] shadow-inner" />
                            <button className="w-full py-6 bg-stone-900 text-white rounded-[2.5rem] font-sans font-bold text-[10px] uppercase tracking-[0.3em] shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3"><Send size={14} /> Send to Sanctuary</button>
-                           <button onClick={() => setSelectedAuthor(null)} className="w-full text-[10px] font-sans font-bold uppercase text-stone-300 tracking-widest">Back</button>
+                           <button onClick={() => setSelectedAuthor(null)} className="w-full text-[10px] font-sans font-bold uppercase text-stone-300 tracking-widest text-center">Back</button>
                         </form>
                       </motion.div>
                     )}
@@ -350,7 +330,7 @@ const App = () => {
                   <p className="text-stone-700 leading-relaxed text-xl italic mb-10">"{t.text}"</p>
                   <div className="flex items-center justify-between border-t border-stone-50 pt-8">
                      <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white ${t.author === 'Praiz' ? 'bg-stone-900' : 'bg-rose-500'}`}>{t.author[0]}</div>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white ${t.author === 'Praiz' ? 'bg-stone-900' : 'bg-rose-500'}`}>{t.author ? t.author[0] : '?'}</div>
                         <span className="text-[11px] font-sans font-black tracking-[0.2em] text-stone-500 uppercase">{t.author}</span>
                      </div>
                      <span className="text-[10px] text-stone-300 font-sans tracking-widest font-bold">{t.createdAt ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : 'Now'}</span>
@@ -381,31 +361,6 @@ const App = () => {
         </div>
       </section>
 
-      <section id="game" className="py-40 px-6">
-        <div className="max-w-2xl mx-auto text-center mb-16"><h2 className="text-4xl italic mb-4">The Quest</h2></div>
-        <div className="relative h-[500px] max-w-2xl mx-auto bg-white rounded-[5rem] shadow-2xl border border-stone-50 overflow-hidden">
-            {gameState === 'idle' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-12">
-                 <Star size={36} className="text-amber-300 mb-8 animate-spin-slow" />
-                 <button onClick={startGame} className="px-16 py-6 bg-stone-900 text-white rounded-full font-sans font-bold uppercase tracking-[0.4em] text-[10px] shadow-2xl transition-all">Invoke Destiny</button>
-              </div>
-            )}
-            {gameState === 'playing' && (
-              <>
-                <div className="absolute top-12 left-1/2 -translate-x-1/2 text-4xl font-light tabular-nums">{gameScore}</div>
-                <AnimatePresence>{hearts.map(h => (<motion.button key={h.id} initial={{ y: -50, x: h.left, opacity: 1 }} animate={{ y: 550 }} exit={{ scale: 0 }} transition={{ duration: h.dur, ease: "linear" }} onClick={() => { setGameScore(s => s + 1); setHearts(p => p.filter(x => x.id !== h.id)); }} className="absolute p-4 text-rose-300 cursor-pointer"><Heart fill="currentColor" size={44} /></motion.button>))}</AnimatePresence>
-              </>
-            )}
-            {gameState === 'finished' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-16 text-center bg-white/98">
-                <Trophy size={72} className="text-amber-400 mb-8" />
-                {gameScore >= 15 ? (<div className="p-10 bg-rose-50 rounded-[4rem] text-rose-600 text-sm italic font-medium">"On August 4, 2029, Praiz & Toyin shall enter their new dawn."</div>) : (<button onClick={startGame} className="text-rose-500 font-sans font-black text-[11px] uppercase tracking-[0.4em] border-b-2 border-rose-100 pb-1">Try Again</button>)}
-                <button onClick={() => setGameState('idle')} className="mt-12 text-[10px] font-sans font-bold text-stone-300 uppercase tracking-widest">Back</button>
-              </div>
-            )}
-        </div>
-      </section>
-
       <footer className="py-40 text-center border-t border-stone-100 bg-white relative">
          <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="inline-block relative mb-10"><Heart size={36} className="text-rose-400 fill-rose-500" /></motion.div>
          <h2 className="text-3xl italic mb-2 tracking-wide">Praiz & Toyin</h2>
@@ -424,8 +379,6 @@ const App = () => {
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: #fee2e2; border-radius: 20px; }
         html { scroll-behavior: smooth; }
-        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin-slow { animation: spin-slow 15s linear infinite; }
       `}</style>
     </div>
   );
